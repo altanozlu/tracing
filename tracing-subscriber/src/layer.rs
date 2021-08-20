@@ -6,6 +6,7 @@ use tracing_core::{
     Event, LevelFilter,
 };
 
+use crate::filter::FilterId;
 #[cfg(feature = "registry")]
 use crate::registry::Registry;
 use crate::registry::{self, LookupSpan, SpanRef};
@@ -536,7 +537,7 @@ pub trait SubscriberExt: Subscriber + crate::sealed::Sealed {
 /// pub struct MyLayer;
 ///
 /// impl<S> Layer<S> for MyLayer
-/// where
+/// where`
 ///     S: Subscriber + for<'a> LookupSpan<'a>,
 /// {
 ///     // ...
@@ -550,6 +551,7 @@ pub trait SubscriberExt: Subscriber + crate::sealed::Sealed {
 #[derive(Debug)]
 pub struct Context<'a, S> {
     subscriber: Option<&'a S>,
+    filter: Option<FilterId>,
 }
 
 /// A [`Subscriber`] composed of a `Subscriber` wrapped by one or more
@@ -931,6 +933,7 @@ where
     fn ctx(&self) -> Context<'_, S> {
         Context {
             subscriber: Some(&self.inner),
+            filter: None,
         }
     }
 }
@@ -1067,6 +1070,7 @@ where
         } else if event.is_contextual() {
             self.lookup_current()
         } else {
+            // TODO(eliza): this should handle parent IDs
             event.parent().and_then(|id| self.span(id))
         }
     }
@@ -1080,7 +1084,7 @@ where
     where
         S: for<'lookup> LookupSpan<'lookup>,
     {
-        let span = self.subscriber.as_ref()?.span(id)?;
+        let span = self.span(id)?;
         Some(span.metadata())
     }
 
@@ -1103,7 +1107,16 @@ where
     where
         S: for<'lookup> LookupSpan<'lookup>,
     {
-        self.subscriber.as_ref()?.span(id)
+        let subscriber = self.subscriber.as_ref()?;
+        if let Some(filter) = self.filter {
+            if !subscriber.is_enabled_for(id, filter) {
+                return None;
+            }
+        }
+
+        subscriber
+            .span(id)
+            .map(|span| span.with_filter(self.filter))
     }
 
     /// Returns `true` if an active span exists for the given `Id`.
@@ -1151,7 +1164,8 @@ where
             "the subscriber should have data for the current span ({:?})!",
             id,
         );
-        span
+        // TODO: should properly worh with filters
+        Some(span?.with_filter(self.filter))
     }
 
     /// Returns an iterator over the [stored data] for all the spans in the
@@ -1253,7 +1267,10 @@ where
 
 impl<'a, S> Context<'a, S> {
     pub(crate) fn none() -> Self {
-        Self { subscriber: None }
+        Self {
+            subscriber: None,
+            filter: None,
+        }
     }
 }
 
@@ -1261,7 +1278,10 @@ impl<'a, S> Clone for Context<'a, S> {
     #[inline]
     fn clone(&self) -> Self {
         let subscriber = self.subscriber.as_ref().copied();
-        Context { subscriber }
+        Context {
+            subscriber,
+            filter: self.filter,
+        }
     }
 }
 
