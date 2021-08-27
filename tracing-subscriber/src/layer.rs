@@ -7,9 +7,9 @@ use tracing_core::{
 };
 
 use crate::filter::{self, FilterId};
-use crate::registry::LookupSpan;
 #[cfg(feature = "registry")]
-use crate::registry::{self, Registry, SpanRef};
+use crate::registry::Registry;
+use crate::registry::{self, LookupSpan, SpanRef};
 use std::{any::TypeId, marker::PhantomData};
 
 /// A composable handler for `tracing` events.
