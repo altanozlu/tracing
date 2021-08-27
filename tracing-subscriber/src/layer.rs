@@ -7,9 +7,9 @@ use tracing_core::{
 };
 
 use crate::filter::{self, FilterId};
+use crate::registry::LookupSpan;
 #[cfg(feature = "registry")]
-use crate::registry::Registry;
-use crate::registry::{self, LookupSpan, SpanRef};
+use crate::registry::{self, Registry, SpanRef};
 use std::{any::TypeId, marker::PhantomData};
 
 /// A composable handler for `tracing` events.
@@ -1308,7 +1308,7 @@ where
 
     pub(crate) fn is_enabled_for(&self, span: &span::Id, filter: FilterId) -> bool
     where
-        S: for<'lookup> registry::LookupSpan<'lookup>,
+        S: for<'lookup> LookupSpan<'lookup>,
     {
         self.subscriber
             .map(|s| s.is_enabled_for(span, filter))
@@ -1317,7 +1317,7 @@ where
 
     pub(crate) fn if_enabled_for(self, span: &span::Id, filter: FilterId) -> Option<Self>
     where
-        S: for<'lookup> registry::LookupSpan<'lookup>,
+        S: for<'lookup> LookupSpan<'lookup>,
     {
         if self.subscriber?.is_enabled_for(span, filter) {
             Some(self.with_filter(filter))
